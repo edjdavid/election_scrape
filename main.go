@@ -268,6 +268,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// downloadChildren("output/root.json")
+	downloadChildren("output/root.json")
 	downloadPrecint()
 }
