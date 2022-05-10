@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -158,7 +159,7 @@ func downloadChildren(file string) {
 			wg.Done()
 		}()
 	}
-	
+
 	for _, r := range children {
 		code := strings.Split(r, "/")[1]
 		dlChan <- []string{dir + code + ".json", "/data/regions/" + r + ".json"}
@@ -173,6 +174,93 @@ func downloadChildren(file string) {
 	}
 }
 
+func downloadPrecint() {
+	err := os.MkdirAll("output/Contest/", 0777)
+	if err != nil {
+		log.Fatal(err)
+	}
+	dir := "output/Barangay/"
+	osdir, err := os.Open(dir)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	dlChan := make(chan []string)
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			for dl := range dlChan {
+				err := download(dl[0], dl[1])
+				if err != nil {
+					log.Print(err)
+				}
+			}
+			wg.Done()
+		}()
+	}
+
+	candidateMap := make(map[int]bool)
+	for {
+		files, err := osdir.Readdirnames(10)
+		if err != nil {
+			log.Print(err)
+			if errors.Is(err, io.EOF) {
+				close(dlChan)
+
+			}
+			break
+		}
+
+		for _, f := range files {
+			bfile, err := os.Open(dir + f)
+			if err != nil {
+				log.Print(err)
+				continue
+			}
+			var out map[string]interface{}
+			err = json.NewDecoder(bfile).Decode(&out)
+			if err != nil {
+				log.Print(err)
+				continue
+			}
+
+			for _, pps := range out["pps"].([]interface{}) {
+				for _, vbsi := range pps.(map[string]interface{})["vbs"].([]interface{}) {
+					switch vbs := vbsi.(type) {
+					case map[string]interface{}:
+						url := vbs["url"].(string)
+						err = os.MkdirAll("output/Precint/"+strings.Split(url, "/")[0], 0777)
+						if err != nil {
+							log.Print(err)
+							continue
+						}
+						err = download("output/Precint/"+url+".json", "/data/results/"+url+".json")
+						if err != nil {
+							log.Print(err)
+							continue
+						}
+						for _, csi := range vbs["cs"].([]interface{}) {
+							cs := int(csi.(float64))
+							if !candidateMap[cs] {
+								id := strconv.Itoa(cs)
+								err = download("output/Contest/"+id+".json", "/data/contests/"+id+".json")
+								if err != nil {
+									log.Print(err)
+									continue
+								}
+								candidateMap[cs] = true
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	wg.Wait()
+}
+
 func main() {
 	// download root
 	err := download("output/root.json", "/data/regions/root.json")
@@ -180,5 +268,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	downloadChildren("output/root.json")
+	// downloadChildren("output/root.json")
+	downloadPrecint()
 }
