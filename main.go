@@ -235,20 +235,12 @@ func downloadPrecint() {
 							log.Print(err)
 							continue
 						}
-						err = download("output/Precint/"+url+".json", "/data/results/"+url+".json")
-						if err != nil {
-							log.Print(err)
-							continue
-						}
+						dlChan <- []string{"output/Precint/"+url+".json", "/data/results/"+url+".json"}
 						for _, csi := range vbs["cs"].([]interface{}) {
 							cs := int(csi.(float64))
 							if !candidateMap[cs] {
 								id := strconv.Itoa(cs)
-								err = download("output/Contest/"+id+".json", "/data/contests/"+id+".json")
-								if err != nil {
-									log.Print(err)
-									continue
-								}
+								dlChan <- []string{"output/Contest/"+id+".json", "/data/contests/"+id+".json"}
 								candidateMap[cs] = true
 							}
 						}
@@ -258,6 +250,7 @@ func downloadPrecint() {
 		}
 	}
 
+	close(dlChan)
 	wg.Wait()
 }
 
