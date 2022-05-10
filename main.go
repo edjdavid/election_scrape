@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -37,11 +38,6 @@ func addHeaders(r *http.Request) {
 func download(localPath, URLPath string) error {
 	if _, err := os.Stat(localPath); errors.Is(err, os.ErrNotExist) {
 		fmt.Println("Downloading: ", URLPath)
-		f, err := os.Create(localPath)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
 
 		req, err := http.NewRequest("GET", baseURL+URLPath, nil)
 		if err != nil {
@@ -71,6 +67,12 @@ func download(localPath, URLPath string) error {
 		default:
 			reader = resp.Body
 		}
+
+		f, err := os.Create(localPath)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
 
 		n, err := io.Copy(f, reader)
 		if err != nil {
@@ -104,19 +106,23 @@ func Children(file string) ([]string, string, error) {
 
 	var (
 		outCodes []string
-		outType string
+		outType  string
 	)
 	if v, ok := outIfce["srs"]; ok {
 		switch vv := v.(type) {
 		case map[string]interface{}:
-			for k, _ := range vv {
-				outCodes = append(outCodes, k)
+			for _, vvv := range vv {
+				switch vvvv := vvv.(type) {
+				case map[string]interface{}:
+					outCodes = append(outCodes, vvvv["url"].(string))
+				}
 			}
-			if len(outCodes) > 0 {
-				switch vvv := vv[outCodes[0]].(type) {
+			for _, v := range vv {
+				switch vvv := v.(type) {
 				case map[string]interface{}:
 					outType = vvv["can"].(string)
 				}
+				break
 			}
 		}
 	}
@@ -124,7 +130,7 @@ func Children(file string) ([]string, string, error) {
 	return outCodes, outType, err
 }
 
-func downloadChildren(file string, dlChan chan []string) {
+func downloadChildren(file string) {
 	children, outType, err := Children(file)
 	if err != nil {
 		log.Print(err)
@@ -136,23 +142,6 @@ func downloadChildren(file string, dlChan chan []string) {
 	if err != nil {
 		log.Print(err)
 		return
-	}
-
-	for _, r := range children {
-		code := r[0:2]
-		dlChan <- []string{dir + r + ".json", "/data/regions/" + code + "/" + r + ".json"}
-	}
-
-	for _, r := range children {
-		downloadChildren(dir + r + ".json", dlChan)
-	}
-}
-
-func main() {
-	// download root
-	err := download("output/root.json", "/data/regions/root.json")
-	if err != nil {
-		log.Fatal(err)
 	}
 
 	var wg sync.WaitGroup
@@ -169,9 +158,27 @@ func main() {
 			wg.Done()
 		}()
 	}
-
-	downloadChildren("output/root.json", dlChan)
+	
+	for _, r := range children {
+		code := strings.Split(r, "/")[1]
+		dlChan <- []string{dir + code + ".json", "/data/regions/" + r + ".json"}
+	}
 
 	close(dlChan)
 	wg.Wait()
+
+	for _, r := range children {
+		code := strings.Split(r, "/")[1]
+		downloadChildren(dir + code + ".json")
+	}
+}
+
+func main() {
+	// download root
+	err := download("output/root.json", "/data/regions/root.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	downloadChildren("output/root.json")
 }
