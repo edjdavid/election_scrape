@@ -207,7 +207,6 @@ func downloadPrecint() {
 			log.Print(err)
 			if errors.Is(err, io.EOF) {
 				close(dlChan)
-
 			}
 			break
 		}
@@ -250,7 +249,6 @@ func downloadPrecint() {
 		}
 	}
 
-	close(dlChan)
 	wg.Wait()
 }
 
